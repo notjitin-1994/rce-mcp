@@ -1,0 +1,38 @@
+[project]
+name = "rce-mcp"
+version = "0.1.0"
+description = "Reality Check Engine MCP — Anti-hallucination verification server"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "httpx>=0.25.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+[project.optional-dependencies]
+hhem = [
+    "transformers>=4.44.0,<5.0.0",
+    "torch>=2.0.0",
+    "tokenizers>=0.20.0",
+    "safetensors>=0.4.0",
+    "sentencepiece>=0.2.0",
+    "regex>=2024.0.0",
+    "numpy>=1.26.0",
+]
+dev = ["pytest", "pytest-asyncio"]
+
+[project.scripts]
+rce-mcp = "rce_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rce_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
