@@ -56,12 +56,13 @@ def truncate(text: str, max_chars: int = 2000) -> str:
     return text[: max_chars - 1] + "…"
 
 
-def confidence_from_sources(results: list[dict]) -> float:
+def confidence_from_sources(results: list[dict], query: str = "") -> float:
     """Compute a rough confidence score from multiple source results.
 
     Uses a simple heuristic:
     - Each source that returns a result contributes 0.25
     - Multiple agreeing sources boost confidence
+    - Query term overlap in result snippets provides an additional boost
     - Max 1.0
 
     This is intentionally simple — the HHEM model provides proper scoring.
@@ -74,4 +75,20 @@ def confidence_from_sources(results: list[dict]) -> float:
         base += 0.15
     if len(results) >= 3:
         base += 0.15
+
+    # Query-term overlap boost: check if query words appear in snippets
+    if query:
+        query_words = set(re.findall(r"\b\w{3,}\b", query.lower()))
+        if query_words:
+            match_count = 0
+            for result in results:
+                snippet = result.get("snippet", "").lower()
+                title = result.get("title", "").lower()
+                text = f"{title} {snippet}"
+                if any(word in text for word in query_words):
+                    match_count += 1
+            # Boost up to +0.2 based on fraction of results matching query terms
+            overlap_ratio = match_count / len(results)
+            base += 0.2 * overlap_ratio
+
     return min(round(base, 2), 1.0)

@@ -28,7 +28,7 @@ class ArxivSource:
         self._timeout = timeout or cfg.web_timeout
         self._max_results = cfg.arxiv_max_results
         self._client = httpx.AsyncClient(
-            headers={"User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)"},
+            headers={"User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)"},
             timeout=self._timeout,
             follow_redirects=True,
         )

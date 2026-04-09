@@ -29,7 +29,7 @@ class GithubSource:
         self._token = cfg.github_token
         self._headers = {
             "Accept": "application/vnd.github+json",
-            "User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)",
+            "User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)",
         }
         if self._token:
             self._headers["Authorization"] = f"Bearer {self._token}"

@@ -94,13 +94,15 @@ async def reality_check(
 ) -> str:
     """Verify a factual claim or question against multiple knowledge sources.
 
-    Searches Wikipedia, Wikidata, and optionally the web to find evidence
-    supporting or contradicting the claim. Returns verified facts with
-    confidence scores and source URLs.
+    Searches across multiple knowledge sources — Wikipedia, Wikidata, ArXiv,
+    GitHub, Stack Exchange, Context7, web, and local filesystem — to find
+    evidence supporting or contradicting the claim. Returns verified facts
+    with confidence scores and source URLs.
 
     Args:
         query: The factual claim or question to verify (e.g. "Python 3.12 was released in October 2023").
-        sources: Which sources to query. Options: ["wikipedia", "wikidata", "web", "arxiv", "github", "context7", "stackexchange"].
+        sources: Which sources to query. Options: ["wikipedia", "wikidata", "web", "arxiv", "github",
+                 "context7", "stackexchange", "local"].
                  Defaults to ["wikipedia", "wikidata"].
 
     Returns:
@@ -112,24 +114,34 @@ async def reality_check(
     src_map = await _get_sources()
     all_results: list[dict[str, Any]] = []
     errors: list[str] = []
+    auth_warnings: list[str] = []
 
     tasks = []
     source_names = []
     for s in sources:
         if s in src_map:
-            tasks.append(src_map[s].search(query, limit=3))
+            src = src_map[s]
+            # Check if source is available (has required auth configured)
+            if hasattr(src, "available") and not src.available:
+                auth_warnings.append(f"{s}: not configured (missing API key or credentials)")
+                continue
+            tasks.append(src.search(query, limit=3))
             source_names.append(s)
 
     if tasks:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for name, result in zip(source_names, results):
             if isinstance(result, Exception):
-                errors.append(f"{name}: {str(result)}")
+                err_msg = str(result)
+                errors.append(f"{name}: {err_msg}")
                 logger.warning("Source %s failed: %s", name, result)
+                # Detect auth-specific errors (401/403) and surface them
+                if any(code in err_msg for code in ("401", "403", "Unauthorized", "Forbidden", "authentication")):
+                    auth_warnings.append(f"{name}: authentication error — {err_msg}")
             elif isinstance(result, list):
                 all_results.extend(result)
 
-    confidence = confidence_from_sources(all_results)
+    confidence = confidence_from_sources(all_results, query=query)
 
     response: dict[str, Any] = {
         "query": query,
@@ -140,6 +152,8 @@ async def reality_check(
     }
     if errors:
         response["errors"] = errors
+    if auth_warnings:
+        response["auth_warnings"] = auth_warnings
 
     return json.dumps(response, ensure_ascii=False, indent=2)
 
@@ -197,7 +211,7 @@ async def _fetch_url(url: str) -> str:
     """Fetch a URL and extract readable text."""
     import httpx
 
-    headers = {"User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)"}
+    headers = {"User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)"}
     try:
         async with httpx.AsyncClient(
             headers=headers, timeout=15.0, follow_redirects=True

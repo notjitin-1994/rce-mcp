@@ -29,7 +29,7 @@ class Context7Source:
         self._client = httpx.AsyncClient(
             headers={
                 "Authorization": f"Bearer {self._api_key}" if self._api_key else "",
-                "User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)",
+                "User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)",
             },
             timeout=self._timeout,
             follow_redirects=True,

@@ -29,7 +29,7 @@ class StackExchangeSource:
         self._key = cfg.stackexchange_key
         self._site = site
         self._client = httpx.AsyncClient(
-            headers={"User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)"},
+            headers={"User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)"},
             timeout=self._timeout,
             follow_redirects=True,
         )

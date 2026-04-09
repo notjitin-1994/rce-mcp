@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -13,7 +12,7 @@ from ..config import get_config
 logger = logging.getLogger(__name__)
 
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
-HEADERS = {"User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)"}
+HEADERS = {"User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)"}
 
 
 class WikidataSource(BaseSource):
@@ -90,8 +89,6 @@ class WikidataSource(BaseSource):
                     "description": description,
                 }
             )
-            await asyncio.sleep(0.1)
-
         return results
 
     def _summarize_claims(self, claims: dict[str, list], max_claims: int = 5) -> str:

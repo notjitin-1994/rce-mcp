@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -13,7 +12,7 @@ from ..config import get_config
 logger = logging.getLogger(__name__)
 
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
-HEADERS = {"User-Agent": "RCE-MCP/1.0 (https://github.com/user/rce-mcp)"}
+HEADERS = {"User-Agent": "RCE-MCP/1.0 (https://github.com/notjitin-1994/rce-mcp)"}
 
 
 class WikipediaSource(BaseSource):
@@ -91,8 +90,6 @@ class WikipediaSource(BaseSource):
                     "page_id": pid,
                 }
             )
-            await asyncio.sleep(0.1)
-
         return results
 
     async def get_article(self, title: str) -> dict[str, Any] | None:
