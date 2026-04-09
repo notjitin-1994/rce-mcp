@@ -21,10 +21,16 @@ class BaseSource(abc.ABC):
         ...
 
 
+# ── Source imports (all 8) ────────────────────────────────────────────────────
+
 from .wikipedia import WikipediaSource  # noqa: E402, F401
 from .wikidata import WikidataSource  # noqa: E402, F401
 from .web import WebSource  # noqa: E402, F401
 from .local import LocalSource  # noqa: E402, F401
+from .arxiv import ArxivSource  # noqa: E402, F401
+from .github import GithubSource  # noqa: E402, F401
+from .context7 import Context7Source  # noqa: E402, F401
+from .stackexchange import StackExchangeSource  # noqa: E402, F401
 
 __all__ = [
     "BaseSource",
@@ -32,4 +38,8 @@ __all__ = [
     "WikidataSource",
     "WebSource",
     "LocalSource",
+    "ArxivSource",
+    "GithubSource",
+    "Context7Source",
+    "StackExchangeSource",
 ]

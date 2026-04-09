@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from . import BaseSource
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,11 @@ class WikidataSource(BaseSource):
 
     name = "wikidata"
 
-    def __init__(self, timeout: float = 10.0) -> None:
+    def __init__(self, timeout: float | None = None) -> None:
+        cfg = get_config()
+        self._timeout = timeout or cfg.web_timeout
         self._client = httpx.AsyncClient(
-            headers=HEADERS, timeout=timeout, follow_redirects=True
+            headers=HEADERS, timeout=self._timeout, follow_redirects=True
         )
 
     async def close(self) -> None:
@@ -75,7 +77,6 @@ class WikidataSource(BaseSource):
             label = entity.get("labels", {}).get("en", {}).get("value", sr.get("label", ""))
             description = entity.get("descriptions", {}).get("en", {}).get("value", sr.get("description", ""))
 
-            # Extract a few key claims as a summary
             claims = entity.get("claims", {})
             claim_summary = self._summarize_claims(claims)
 

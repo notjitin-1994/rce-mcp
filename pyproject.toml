@@ -1,6 +1,6 @@
 [project]
 name = "rce-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reality Check Engine MCP — Anti-hallucination verification server"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,6 +25,7 @@ dev = ["pytest", "pytest-asyncio"]
 
 [project.scripts]
 rce-mcp = "rce_mcp.server:main"
+rce-setup = "rce_mcp.setup:main"
 
 [build-system]
 requires = ["hatchling"]

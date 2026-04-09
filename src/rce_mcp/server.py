@@ -16,8 +16,19 @@ from typing import Any, Optional
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
+from .config import get_config
 from .hhem import hhem_status, is_hhem_available, score_hallucination
-from .sources import LocalSource, WebSource, WikidataSource, WikipediaSource
+from .sources import (
+    ArxivSource,
+    BaseSource,
+    Context7Source,
+    GithubSource,
+    LocalSource,
+    StackExchangeSource,
+    WebSource,
+    WikidataSource,
+    WikipediaSource,
+)
 from .utils import confidence_from_sources, strip_html, truncate
 
 logger = logging.getLogger("rce-mcp")
@@ -34,22 +45,31 @@ mcp = FastMCP(
 )
 
 
-# ── Source instances (created at tool-call time to keep startup fast) ─────────
+# ── Source instances (lazy-initialized) ──────────────────────────────────────
 
 _sources: dict[str, Any] | None = None
+
+
+def _build_sources() -> dict[str, BaseSource]:
+    """Build all available source backends from config."""
+    cfg = get_config()
+    return {
+        "wikipedia": WikipediaSource(),
+        "wikidata": WikidataSource(),
+        "web": WebSource(),
+        "local": LocalSource(),
+        "arxiv": ArxivSource(),
+        "github": GithubSource(),
+        "context7": Context7Source(),
+        "stackexchange": StackExchangeSource(),
+    }
 
 
 async def _get_sources() -> dict[str, Any]:
     """Lazy-initialize all source backends."""
     global _sources
     if _sources is None:
-        local_dir = os.environ.get("RCE_LOCAL_DIR", os.path.expanduser("~"))
-        _sources = {
-            "wikipedia": WikipediaSource(),
-            "wikidata": WikidataSource(),
-            "web": WebSource(),
-            "local": LocalSource(base_dir=local_dir),
-        }
+        _sources = _build_sources()
     return _sources
 
 
@@ -80,7 +100,7 @@ async def reality_check(
 
     Args:
         query: The factual claim or question to verify (e.g. "Python 3.12 was released in October 2023").
-        sources: Which sources to query. Options: ["wikipedia", "wikidata", "web"].
+        sources: Which sources to query. Options: ["wikipedia", "wikidata", "web", "arxiv", "github", "context7", "stackexchange"].
                  Defaults to ["wikipedia", "wikidata"].
 
     Returns:
@@ -93,7 +113,6 @@ async def reality_check(
     all_results: list[dict[str, Any]] = []
     errors: list[str] = []
 
-    # Run source queries concurrently
     tasks = []
     source_names = []
     for s in sources:
@@ -168,7 +187,6 @@ async def reality_source(
     Returns:
         JSON with content snippet, metadata, and validation status.
     """
-    # Detect URL vs file path
     if url_or_path.startswith(("http://", "https://")):
         return await _fetch_url(url_or_path)
     else:
@@ -263,12 +281,16 @@ async def reality_search(
 
     Args:
         query: The search query.
-        scope: Which source to search. Options: "web", "wikipedia", "wikidata", "local".
+        scope: Which source to search. Options: "web", "wikipedia", "wikidata", "local",
+               "arxiv", "github", "context7", "stackexchange".
 
     Returns:
         JSON with search results including titles, snippets, and URLs.
     """
-    valid_scopes = {"web", "wikipedia", "wikidata", "local"}
+    valid_scopes = {
+        "web", "wikipedia", "wikidata", "local",
+        "arxiv", "github", "context7", "stackexchange",
+    }
     if scope not in valid_scopes:
         return json.dumps(
             {
@@ -309,14 +331,25 @@ async def rce_status() -> str:
     Returns:
         JSON with server status information.
     """
+    cfg = get_config()
+
+    # Build source availability list
+    all_sources = _build_sources()
+    source_status = []
+    for name, src in all_sources.items():
+        available = True
+        if hasattr(src, "available"):
+            available = src.available
+        source_status.append({"name": name, "available": available})
+
     return json.dumps(
         {
             "name": "RCE MCP",
             "version": __version__,
             "description": "Reality Check Engine — Anti-hallucination verification server",
-            "sources": ["wikipedia", "wikidata", "web", "local"],
+            "sources": source_status,
             "hhem": hhem_status(),
-            "transport": os.environ.get("RCE_TRANSPORT", "stdio"),
+            "transport": cfg.transport,
         },
         indent=2,
     )
@@ -333,16 +366,15 @@ def main() -> None:
     )
     logger.info("RCE MCP v%s starting...", __version__)
 
-    transport = os.environ.get("RCE_TRANSPORT", "stdio")
-    logger.info("Transport: %s", transport)
+    cfg = get_config()
+    logger.info("Transport: %s", cfg.transport)
 
     try:
-        if transport == "streamable-http":
+        if cfg.transport == "streamable-http":
             mcp.run(transport="streamable-http")
         else:
             mcp.run(transport="stdio")
     finally:
-        # Clean up (best-effort; stdio servers may not get here)
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():

@@ -9,7 +9,7 @@ from urllib.parse import unquote
 
 import httpx
 
-from . import BaseSource
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,11 @@ class WebSource(BaseSource):
 
     name = "web"
 
-    def __init__(self, timeout: float = 15.0) -> None:
+    def __init__(self, timeout: float | None = None) -> None:
+        cfg = get_config()
+        self._timeout = timeout or cfg.web_timeout
         self._client = httpx.AsyncClient(
-            headers=HEADERS, timeout=timeout, follow_redirects=True
+            headers=HEADERS, timeout=self._timeout, follow_redirects=True
         )
 
     async def close(self) -> None:
@@ -47,36 +49,31 @@ class WebSource(BaseSource):
 
     @staticmethod
     def _parse_ddg_html(html: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Parse DDG HTML using regex — more reliable than HTMLParser for this format."""
+        """Parse DDG HTML using regex."""
         results: list[dict[str, Any]] = []
 
-        # Extract all result links: href="//duckduckgo.com/l/?uddg=<encoded_url>..."
         link_pattern = re.compile(
             r'class="result__a"[^>]*href="([^"]*)"',
             re.DOTALL,
         )
         links = link_pattern.findall(html)
 
-        # Extract all snippets
         snippet_pattern = re.compile(
             r'class="result__snippet"[^>]*>(.*?)</a>',
             re.DOTALL,
         )
         snippets = snippet_pattern.findall(html)
 
-        # Extract all titles (from the link text content)
         title_pattern = re.compile(
             r'class="result__a"[^>]*>(.*?)</a>',
             re.DOTALL,
         )
         titles = title_pattern.findall(html)
 
-        # Clean HTML tags from titles and snippets
         def clean(text: str) -> str:
             return re.sub(r"<[^>]+>", "", text).strip()
 
         for i, link in enumerate(links[:limit]):
-            # Extract actual URL from DDG redirect
             match = re.search(r"uddg=([^&]+)", link)
             if match:
                 url = unquote(match.group(1))
@@ -88,7 +85,7 @@ class WebSource(BaseSource):
             title = clean(titles[i]) if i < len(titles) else url
             snippet = clean(snippets[i]) if i < len(snippets) else ""
 
-            if url:  # Skip empty URLs
+            if url:
                 results.append(
                     {
                         "title": title[:200],

@@ -7,18 +7,17 @@ import os
 from pathlib import Path
 from typing import Any
 
+from ..config import get_config
 from . import BaseSource
 
 logger = logging.getLogger(__name__)
 
-# Extensions considered text-searchable
 TEXT_EXTENSIONS = frozenset(
     ".txt .md .rst .csv .json .yaml .yml .toml .xml .html .css .js .ts .tsx .jsx "
     ".py .rb .go .rs .java .c .cpp .h .hpp .cs .php .sh .bash .zsh .fish "
     ".cfg .ini .conf .env .log .sql .r .lua .vim .el .org .tex .bib".split()
 )
 
-# Directories to skip
 SKIP_DIRS = frozenset(
     [
         ".git",
@@ -36,7 +35,6 @@ SKIP_DIRS = frozenset(
     ]
 )
 
-# Max file size to read (1 MB)
 MAX_FILE_SIZE = 1_048_576
 
 
@@ -46,7 +44,8 @@ class LocalSource(BaseSource):
     name = "local"
 
     def __init__(self, base_dir: str | None = None) -> None:
-        self._base_dir = Path(base_dir or os.environ.get("RCE_LOCAL_DIR", os.path.expanduser("~")))
+        cfg = get_config()
+        self._base_dir = Path(base_dir or cfg.local_dir)
         if not self._base_dir.is_dir():
             logger.warning("Local search base dir does not exist: %s", self._base_dir)
 
@@ -61,11 +60,10 @@ class LocalSource(BaseSource):
         query_lower = query.lower()
         results: list[dict[str, Any]] = []
         files_searched = 0
-        max_files = 500  # Safety limit
+        max_files = 500
 
         try:
             for root, dirs, files in os.walk(self._base_dir):
-                # Skip unwanted directories
                 dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
 
                 for fname in files:
@@ -79,7 +77,6 @@ class LocalSource(BaseSource):
 
                     fpath = Path(root) / fname
 
-                    # Skip large files
                     try:
                         if fpath.stat().st_size > MAX_FILE_SIZE:
                             continue
@@ -91,9 +88,7 @@ class LocalSource(BaseSource):
                     except (OSError, UnicodeDecodeError):
                         continue
 
-                    # Simple substring search
                     if query_lower in content.lower():
-                        # Extract surrounding context
                         idx = content.lower().find(query_lower)
                         start = max(0, idx - 150)
                         end = min(len(content), idx + len(query) + 150)

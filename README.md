@@ -12,38 +12,55 @@ RCE MCP is a standalone Model Context Protocol server that verifies factual clai
 LLMs hallucinate. Existing solutions are either **post-hoc** (check after generation) or **single-source** (only Wikidata, only web search). RCE MCP is different:
 
 - **Upstream verification** — verify facts *before* including them in responses
-- **Multi-source RAG** — Wikipedia, Wikidata, web search, local filesystem
+- **Multi-source RAG** — 8 knowledge sources (5 free, 3 optional with API keys)
 - **HHEM scoring** — Vectara's open-source hallucination detection model (optional)
-- **Zero API keys** — core functionality works without any paid service
+- **Zero-config core** — core functionality works without any paid service
 - **Universal** — works with OpenClaw, Claude Code, Codex, Cursor, Windsurf, VS Code, any MCP client
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    RCE MCP Server                      │
-│                  (FastMCP / stdio)                     │
-│                                                       │
-│  Tools:                                               │
-│  ├── reality_check(query, sources[])                  │
-│  │   └── Parallel search → Wikipedia + Wikidata + Web │
-│  ├── reality_verify(text, source_text)                │
-│  │   └── HHEM-2.1-Open scoring (0.0–1.0)            │
-│  ├── reality_source(url_or_path)                      │
-│  │   └── Fetch URL or read file                       │
-│  ├── reality_search(query, scope)                     │
-│  │   └── Scoped: web / wikipedia / wikidata / local   │
-│  └── rce_status()                                     │
-│      └── Version, sources, HHEM status                │
-│                                                       │
-│  Verification Backends:                               │
-│  ├── Wikipedia (MediaWiki API)          [FREE]        │
-│  ├── Wikidata (Wikidata API)            [FREE]        │
-│  ├── DuckDuckGo (HTML scraping)         [FREE]        │
-│  ├── Local filesystem                   [FREE]        │
-│  └── HHEM-2.1-Open (local model)        [OPTIONAL]    │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      RCE MCP Server                           │
+│                    (FastMCP / stdio)                          │
+│                                                              │
+│  Tools:                                                      │
+│  ├── reality_check(query, sources[])                         │
+│  │   └── Parallel search → all configured sources            │
+│  ├── reality_verify(text, source_text)                       │
+│  │   └── HHEM-2.1-Open scoring (0.0–1.0)                    │
+│  ├── reality_source(url_or_path)                             │
+│  │   └── Fetch URL or read file                              │
+│  ├── reality_search(query, scope)                            │
+│  │   └── Scoped search across any source                     │
+│  └── rce_status()                                            │
+│      └── Version, sources, HHEM status                       │
+│                                                              │
+│  Verification Backends:                                      │
+│  ├── Wikipedia (MediaWiki API)              [FREE]           │
+│  ├── Wikidata (Wikidata API)                [FREE]           │
+│  ├── DuckDuckGo (HTML scraping)             [FREE]           │
+│  ├── arXiv (Atom API)                       [FREE]           │
+│  ├── Local filesystem                      [FREE]           │
+│  ├── GitHub (REST API)              [GITHUB_TOKEN]           │
+│  ├── Context7 (API)              [CONTEXT7_API_KEY]          │
+│  ├── Stack Exchange (API)        [STACKEXCHANGE_KEY]         │
+│  └── HHEM-2.1-Open (local model)             [OPTIONAL]      │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+## Knowledge Sources
+
+| Source | Best For | API Key | Free Tier |
+|--------|----------|---------|-----------|
+| **Wikipedia** | General knowledge, dates, biographies | None | Unlimited |
+| **Wikidata** | Structured facts, entity properties | None | Unlimited |
+| **DuckDuckGo** | Current events, recent info, general web | None | Unlimited |
+| **arXiv** | Academic papers, research, citations | None | Unlimited |
+| **Local** | Codebase docs, personal notes, configs | None | Unlimited |
+| **GitHub** | Code search, issues, repositories | `GITHUB_TOKEN` | 5,000 req/hr |
+| **Context7** | Library/framework documentation | `CONTEXT7_API_KEY` | Varies |
+| **Stack Exchange** | Programming Q&A (Stack Overflow, etc.) | `STACKEXCHANGE_KEY` | Higher limits |
 
 ## Tools Reference
 
@@ -90,7 +107,7 @@ Fetch and validate a URL or local file.
 
 ### `reality_search(query, scope)`
 
-Search a specific source: `"web"`, `"wikipedia"`, `"wikidata"`, or `"local"`.
+Search a specific source: `"web"`, `"wikipedia"`, `"wikidata"`, `"local"`, `"arxiv"`, `"github"`, `"context7"`, or `"stackexchange"`.
 
 ### `rce_status()`
 
@@ -101,14 +118,9 @@ Server health check — version, available sources, HHEM model status.
 ### Option 1: uv (recommended)
 
 ```bash
-# Clone
 git clone https://github.com/user/rce-mcp.git
 cd rce-mcp
-
-# Install
 uv sync
-
-# Run
 uv run rce-mcp
 ```
 
@@ -144,6 +156,33 @@ uv sync --extra hhem
 
 The model (~1.8 GB) is downloaded from HuggingFace on first use and cached locally. It lazy-loads — server startup is not affected.
 
+## API Key Setup
+
+Three optional sources require API keys for access:
+
+### Quick Setup (interactive)
+
+```bash
+python -m rce_mcp.setup
+```
+
+### Manual Setup
+
+Set environment variables before starting the server:
+
+```bash
+# GitHub (for code search, issue lookup)
+export GITHUB_TOKEN="YOUR_GITHUB_TOKEN_HERE"
+
+# Context7 (for library documentation)
+export CONTEXT7_API_KEY="YOUR_CONTEXT7_API_KEY_HERE"
+
+# Stack Exchange (for programming Q&A)
+export STACKEXCHANGE_KEY="YOUR_STACKEXCHANGE_KEY_HERE"
+```
+
+See [API_KEYS.md](API_KEYS.md) for detailed setup instructions for each key.
+
 ## Configuration
 
 ### OpenClaw
@@ -151,23 +190,22 @@ The model (~1.8 GB) is downloaded from HuggingFace on first use and cached local
 ```bash
 openclaw mcp set rce-mcp '{
   "command": "uv",
-  "args": ["--directory", "/path/to/rce-mcp", "run", "rce-mcp"]
-}'
-```
-
-Or with pip:
-```bash
-openclaw mcp set rce-mcp '{
-  "command": "python",
-  "args": ["-m", "rce_mcp.server"],
-  "env": { "PYTHONPATH": "/path/to/rce-mcp/src" }
+  "args": ["--directory", "/path/to/rce-mcp", "run", "rce-mcp"],
+  "env": {
+    "GITHUB_TOKEN": "YOUR_GITHUB_TOKEN_HERE",
+    "CONTEXT7_API_KEY": "YOUR_CONTEXT7_API_KEY_HERE",
+    "STACKEXCHANGE_KEY": "YOUR_STACKEXCHANGE_KEY_HERE"
+  }
 }'
 ```
 
 ### Claude Code
 
 ```bash
-claude mcp add rce-mcp -- uv --directory /path/to/rce-mcp run rce-mcp
+claude mcp add rce-mcp -- \
+  env GITHUB_TOKEN=YOUR_GITHUB_TOKEN_HERE \
+  env CONTEXT7_API_KEY=YOUR_CONTEXT7_API_KEY_HERE \
+  -- uv --directory /path/to/rce-mcp run rce-mcp
 ```
 
 ### Cursor / VS Code
@@ -179,7 +217,12 @@ Add to `.vscode/mcp.json`:
   "mcpServers": {
     "rce-mcp": {
       "command": "uv",
-      "args": ["--directory", "/path/to/rce-mcp", "run", "rce-mcp"]
+      "args": ["--directory", "/path/to/rce-mcp", "run", "rce-mcp"],
+      "env": {
+        "GITHUB_TOKEN": "YOUR_GITHUB_TOKEN_HERE",
+        "CONTEXT7_API_KEY": "YOUR_CONTEXT7_API_KEY_HERE",
+        "STACKEXCHANGE_KEY": "YOUR_STACKEXCHANGE_KEY_HERE"
+      }
     }
   }
 }
@@ -194,7 +237,12 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "rce-mcp": {
       "command": "uv",
-      "args": ["--directory", "/path/to/rce-mcp", "run", "rce-mcp"]
+      "args": ["--directory", "/path/to/rce-mcp", "run", "rce-mcp"],
+      "env": {
+        "GITHUB_TOKEN": "YOUR_GITHUB_TOKEN_HERE",
+        "CONTEXT7_API_KEY": "YOUR_CONTEXT7_API_KEY_HERE",
+        "STACKEXCHANGE_KEY": "YOUR_STACKEXCHANGE_KEY_HERE"
+      }
     }
   }
 }
@@ -206,13 +254,18 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 |----------|---------|-------------|
 | `RCE_TRANSPORT` | `stdio` | Transport mode: `stdio` or `streamable-http` |
 | `RCE_LOCAL_DIR` | `~` | Base directory for local filesystem search |
+| `GITHUB_TOKEN` | *(none)* | GitHub Personal Access Token |
+| `CONTEXT7_API_KEY` | *(none)* | Context7 API key |
+| `STACKEXCHANGE_KEY` | *(none)* | Stack Exchange API key |
+| `RCE_ARXIV_MAX_RESULTS` | `5` | Max results from arXiv search |
+| `RCE_WEB_TIMEOUT` | `15` | HTTP timeout in seconds |
 
 ## How It Works
 
 ### Verification Pipeline
 
 1. **Query received** — `reality_check("Python 3.12 release date")`
-2. **Parallel search** — Wikipedia + Wikidata + (optional) web, all queried concurrently
+2. **Parallel search** — All configured sources queried concurrently
 3. **Evidence collection** — Titles, snippets, URLs, entity claims gathered
 4. **Confidence scoring** — Multiple sources agreeing → higher confidence
 5. **Structured response** — JSON with facts, sources, and confidence level
@@ -233,18 +286,22 @@ Based on [Vectara's HHEM-2.1-Open](https://huggingface.co/vectara/hallucination_
 | Wikipedia | General knowledge, dates, biographies | ~200ms | No |
 | Wikidata | Structured facts, entity properties | ~300ms | No |
 | Web (DDG) | Current events, recent information | ~1s | No |
+| arXiv | Academic papers, research | ~500ms | No |
 | Local | Codebase docs, personal notes, configs | ~50ms | Yes |
+| GitHub | Code search, issues, repos | ~300ms | No |
+| Context7 | Library documentation | ~400ms | No |
+| Stack Exchange | Programming Q&A | ~300ms | No |
 | HHEM | Scoring any text against a reference | ~100ms | Yes* |
 
-*After initial model download
+\*After initial model download
 
 ## Comparison
 
 | Feature | RCE MCP | Strawberry | Perf MCP | Fact Checker MCP |
 |---------|---------|------------|----------|-----------------|
 | Approach | Upstream RAG | Post-hoc KL divergence | Multi-channel verify | Wikidata-only |
-| Sources | 4 (Wiki, WD, Web, Local) | Context only | Web + NLI | Wikidata |
-| API keys required | None | OpenAI | Yes (paid) | None |
+| Sources | 8 (5 free + 3 optional) | Context only | Web + NLI | Wikidata |
+| API keys required | None (3 optional) | OpenAI | Yes (paid) | None |
 | Local scoring | Yes (HHEM) | No | No | No |
 | Standalone MCP | Yes | Yes | Yes | Yes |
 | Cost | Free | API costs | $19/mo | Free |
@@ -262,8 +319,14 @@ uv run pytest
 # Run server
 uv run rce-mcp
 
+# Run setup wizard
+uv run rce-setup
+
+# Check source connectivity
+uv run rce-setup --check
+
 # Test with MCP Inspector
-uv run rce-mcp &  # start server in background
+uv run rce-mcp &
 npx -y @modelcontextprotocol/inspector
 ```
 
@@ -283,4 +346,5 @@ MIT — see [LICENSE](LICENSE).
 
 - [HHEM-2.1-Open](https://huggingface.co/vectara/hallucination_evaluation_model) by Vectara — open-source hallucination detection
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) by Anthropic
-- [Strawberry Toolkit](https://github.com/hassanalabs/strawberry) by Hassana Labs — inspiration for information-theoretic approach
+- [arXiv API](https://info.arxiv.org/help/api/index.html) — free academic paper search
+- [Stack Exchange API](https://api.stackexchange.com/) — programming Q&A

@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from . import BaseSource
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,11 @@ class WikipediaSource(BaseSource):
 
     name = "wikipedia"
 
-    def __init__(self, timeout: float = 10.0) -> None:
+    def __init__(self, timeout: float | None = None) -> None:
+        cfg = get_config()
+        self._timeout = timeout or cfg.web_timeout
         self._client = httpx.AsyncClient(
-            headers=HEADERS, timeout=timeout, follow_redirects=True
+            headers=HEADERS, timeout=self._timeout, follow_redirects=True
         )
 
     async def close(self) -> None:
@@ -64,9 +66,7 @@ class WikipediaSource(BaseSource):
         try:
             resp2 = await self._client.get(WIKIPEDIA_API, params=extract_params)
             resp2.raise_for_status()
-            pages = (
-                resp2.json().get("query", {}).get("pages", {})
-            )
+            pages = resp2.json().get("query", {}).get("pages", {})
         except Exception as exc:
             logger.warning("Wikipedia extract failed: %s", exc)
             pages = {}
@@ -77,7 +77,6 @@ class WikipediaSource(BaseSource):
             page = pages.get(pid, {})
             title = hit.get("title", "")
             snippet = hit.get("snippet", "")
-            # Clean HTML from search snippet
             clean_snippet = (
                 snippet.replace("<span class=\"searchmatch\">", "")
                 .replace("</span>", "")
@@ -92,7 +91,6 @@ class WikipediaSource(BaseSource):
                     "page_id": pid,
                 }
             )
-            # Small delay to be polite
             await asyncio.sleep(0.1)
 
         return results
